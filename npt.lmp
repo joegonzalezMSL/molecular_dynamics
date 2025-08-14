@@ -1,0 +1,34 @@
+dimension       3
+units           metal
+atom_style      atomic
+boundary		p p p
+
+read_data		_SAMPLE_
+
+pair_style		hybrid/overlay pace product table linear 10000
+pair_coeff		* * pace c_v3.yace C
+pair_coeff		* * table d2.table D2 9.0
+
+neighbor		2.0 bin
+neigh_modify	every 1 delay 0 check yes
+
+
+compute     	atom_energy all pe/atom
+compute      	Msd all  msd 
+
+
+timestep        0.0005
+thermo          2000
+thermo_style    custom step time temp etotal pe ke press vol density c_Msd[4] 
+thermo_modify   format float %.6f
+
+compute         atomCoord all coord/atom cutoff 2.0
+
+dump        	RDUMP all custom 20000 dumps/SCD-40GPa_4500K-*.xyz id type x y z c_atom_energy c_atomCoord
+
+velocity 		all create 4500  23796
+
+fix 			LANG all langevin 4500 4500 $(300.0*dt) 33948
+fix 			PRESS all nph iso 400000 400000 $(500.0*dt)
+run  			600000
+
