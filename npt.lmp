@@ -30,7 +30,7 @@ thermo_modify   norm yes
 
 compute         atomCoord all coord/atom cutoff 2.0
 
-dump        	RDUMP all custom 20000 dumps/${ph}-_P_GPa__T_K-*.xyz id type x y z c_atom_energy c_atomCoord
+dump        	RDUMP all custom 20000 dumps/${ph}-_P_GPa-_T_K-*.xyz id type x y z c_atom_energy c_atomCoord
 
 
 #_P_GPa  _T_K calculation
