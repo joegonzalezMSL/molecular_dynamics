@@ -1,9 +1,17 @@
+## NPT run using the carbon ACE potential
 dimension       3
 units           metal
 atom_style      atomic
 boundary		p p p
 
 read_data		_SAMPLE_
+
+variable		pbar equal _P_*10000
+variable		thold equal _T_
+variable		itemp equal 2*_T_
+variable		runNPT equal 600000
+variable		tstep equal 0.0005
+variable		ph string "SCD"
 
 pair_style		hybrid/overlay pace product table linear 10000
 pair_coeff		* * pace c_v3.yace C
@@ -12,23 +20,22 @@ pair_coeff		* * table d2.table D2 9.0
 neighbor		2.0 bin
 neigh_modify	every 1 delay 0 check yes
 
-
 compute     	atom_energy all pe/atom
 compute      	Msd all  msd 
 
-
-timestep        0.0005
+timestep        ${tstep}
 thermo          2000
-thermo_style    custom step time temp etotal pe ke press vol density c_Msd[4] 
-thermo_modify   format float %.6f
+thermo_style    custom step time temp pe ke pxx pyy pzz press vol density c_Msd[4] 
+thermo_modify   norm yes
 
 compute         atomCoord all coord/atom cutoff 2.0
 
-dump        	RDUMP all custom 20000 dumps/SCD-40GPa_4500K-*.xyz id type x y z c_atom_energy c_atomCoord
+dump        	RDUMP all custom 20000 dumps/${ph}-_P_GPa__T_K-*.xyz id type x y z c_atom_energy c_atomCoord
 
-velocity 		all create 4500  23796
 
-fix 			LANG all langevin 4500 4500 $(300.0*dt) 33948
-fix 			PRESS all nph iso 400000 400000 $(500.0*dt)
-run  			600000
+#_P_GPa  _T_K calculation
+velocity 		all create ${itemp}  23796
 
+fix 			LANG all langevin ${thold} ${thold} $(300.0*dt) 33948
+fix 			PRESS all nph iso ${pbar} ${pbar} $(500.0*dt)
+run  			${runNPT}
