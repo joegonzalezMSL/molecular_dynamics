@@ -1,0 +1,130 @@
+units           metal
+atom_style      atomic
+boundary        p p p
+read_data       sic-4H-0.structure
+
+replicate	60 35 1000
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+#              User-defined variables                #
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+variable                tstep  equal "0.000200"    # Estimated timestep in ps
+variable                itemp  equal "300"        # Initial temperature of atoms in K
+variable                pistonVeloc equal "66.483905"     #piston velocity in Å/ps
+variable                dumpSlice equal "1000"    # for 360k steps, gives 36 frames
+variable                dumpFull equal "5000"     # for 360k steps, gives 24 frames
+variable                mdSteps equal "140000"
+variable                thermoFreq equal "2000"
+variable		BinSize equal 0.1
+variable		bin1DFreq equal 1000
+
+variable 		exit equal is_file(STOP)
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+#              Potential + Setup                     #
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+pair_style      pace product
+pair_coeff      * * sic-oct2024.yace Si C
+
+timestep 		${tstep}
+neighbor        	2.0 bin
+neigh_modify    	every 1 delay 0 check yes
+thermo  		${thermoFreq}
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+#          Output Computes+Variables                 #
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+
+compute 		ALL_PE all pe                        # Compute total potential energy of system
+compute 		SE_ALL all stress/atom NULL virial   # Compute stress on each atom ( [6 x Natom] array )
+compute 		PE_ALL all pe/atom                   # Compute potential energy per atom ( [Natom] vector )
+compute 		CSymm  all centro/atom 4             # Compute central symmetry parameter ( NearestNeighbor = 12 )
+compute 		KE_ALL all ke/atom                   # Compute kinetic energy per atom ( [3 x Natom] array output )
+compute 		coords all property/atom x y z
+
+compute 		XX all property/atom xs
+compute 		YY all property/atom ys
+compute         	2 all reduce sum c_XX
+compute			3 all reduce sum c_YY
+thermo_style    	custom step temp pe c_2 c_3
+run             	0
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+#              Initial: Anneal samplei using NVT     #
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+thermo_style            custom step temp ke pe etotal pxx pyy pzz zlo zhi density
+thermo_modify		norm yes
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+#             Equilibrate sample at 0GPa, 300K       #
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+
+velocity                all create 600 9999
+
+fix                     NVT all langevin ${itemp} ${itemp} 0.1 3216548
+fix			NPT all nph iso 0 0 $(500.0*dt)
+run			6000
+unfix			NPT
+unfix			NVT
+
+fix                     NVEs all nve
+
+change_box              all boundary p p s
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+#              Dump files + restarts                 #
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+
+variable		zm equal zlo
+variable		pistonPos equal "v_zm - 5.0"
+variable                x_low equal 0.45*lx
+variable                x_high equal 0.55*lx
+variable                y_low equal 0.45*ly
+variable                y_high equal 0.55*ly
+#Components of temperature
+variable		vx2 atom vx*vx
+variable		vy2 atom vy*vy
+variable		vz2 atom vz*vz
+
+
+# Define the region for the dynamic slice & dynamic group
+region                  slice_xdyn block ${x_low} ${x_high} INF INF INF INF units box
+group                   sliceX_dyn dynamic all region slice_xdyn every ${dumpSlice}
+
+#region                  slice_ydyn block INF INF ${y_low} ${y_high} INF INF units box
+#group                   sliceY_dyn dynamic all region slice_ydyn every ${dumpSlice}
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+#              Initial: Anneal samplei using NVT     #
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+thermo_style            custom step temp ke pe etotal pxx pyy pzz zlo zhi density
+
+
+dump                    DUMPX sliceX_dyn custom ${dumpSlice} dumps/xface-*.xyz &
+                                id type x y z vx vy vz c_SE_ALL[1] c_SE_ALL[2] c_SE_ALL[3] c_PE_ALL c_KE_ALL
+dump_modify             DUMPX sort -5
+
+#dump                    DUMPY sliceY_dyn custom ${dumpSlice} dumps/yface-*.xyz &
+                                id type x y z vx vy vz c_SE_ALL[1] c_SE_ALL[2] c_SE_ALL[3] c_SE_ALL[4] c_SE_ALL[5] c_SE_ALL[6] c_PE_ALL c_KE_ALL
+#dump_modify             DUMPY sort -5
+
+
+## at least 20 profiles, perhaps 10
+#dump 			Dump4 all custom ${dumpFull} dumps-*/PCD-shock-%.xyz id type x y z vx vy vz c_SE_ALL[1] c_SE_ALL[2] c_SE_ALL[3] c_PE_ALL c_KE_ALL c_CSymm
+#dump_modify 		Dump4 sort -5
+
+compute         Chunk2 all chunk/atom bin/1d z 0.0 ${BinSize} units box
+fix             prop2 all ave/chunk ${bin1DFreq} 1 ${bin1DFreq} Chunk2 c_KE_ALL c_PE_ALL c_SE_ALL[1] c_SE_ALL[2] c_SE_ALL[3] vx vy vz v_vx2 v_vy2 v_vz2 file profiles.dat
+
+restart         20000 shock-300-rst.*
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+#              Simulation: Piston                    #
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+
+fix 			wall all wall/piston zlo pos ${pistonPos} vel ${pistonVeloc}  units box
+fix 			BAL all balance 2000 1.05 shift z 10 1.05 weight time 1.0
+fix 			HALT all halt 20000 v_exit != 0 error soft
+
+run 			${mdSteps}
+shell 			"touch END"
