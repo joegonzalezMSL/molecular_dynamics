@@ -22,6 +22,3 @@ make yes-EXTRA-PAIR
 #make  crusher_kokkos -j 16
 make  frontier_kokkos -j 16
 
-#cp lmp_crusher_kokkos ../bin/
-cp frontier_kokkos  ../bin/
-
