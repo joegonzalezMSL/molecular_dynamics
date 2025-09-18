@@ -1,7 +1,7 @@
 #!/bin/bash
 module load craype-accel-amd-gfx90a
 module load PrgEnv-amd
-module load rocm/5.7.1
+module load rocm/6.2.4
 module load cray-python/3.9.12.1   #for ace installing
 
 make clean-all
