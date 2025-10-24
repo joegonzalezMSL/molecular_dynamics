@@ -5,6 +5,8 @@ boundary        p p p
 
 read_data       starting.structure
 
+change_box     all x scale 1.1 y scale 1.1 z scale 1.1 remap
+
 variable		pbar equal _P_*10000
 
 neighbor        2.0 bin
