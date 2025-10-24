@@ -1,0 +1,33 @@
+dimension       3
+units           metal
+atom_style      atomic
+boundary        p p p
+
+read_data       starting.structure
+
+variable		pbar equal _P_*10000
+
+neighbor        2.0 bin
+neigh_modify    delay 0 every 10 check yes
+
+pair_style              hybrid/overlay pace product table linear 10000
+pair_coeff              * * pace c_v3.yace C
+pair_coeff              * * table d2.table D2 9.0
+
+compute         atom_energy all pe/atom
+compute         Msd all  msd
+
+
+thermo          2000
+thermo_style    custom step time temp etotal pe ke press vol density c_Msd[4]
+
+dump            RDUMP all custom 1000 dumps/relax-*.xyz id type x y z c_atom_energy
+
+
+min_style       cg
+#fix            relax all box/relax iso ${pbar} couple xyz
+minimize        1.0e-8 1.0e-8 20000 100000
+
+write_data      relaxed.structure
+
+
