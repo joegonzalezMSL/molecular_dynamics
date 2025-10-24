@@ -6,6 +6,8 @@ boundary		p p p
 
 read_data		_SAMPLE_
 
+#replicate  3 3 3
+
 variable		thold equal _T_
 variable		itemp equal 2*_T_
 variable		runNVE equal 600000
