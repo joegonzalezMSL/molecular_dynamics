@@ -1,0 +1,19 @@
+dimension       3
+units           metal
+atom_style      atomic
+boundary        p p p
+
+read_data       _SAMPLE_
+
+neighbor        2.0 bin
+neigh_modify    delay 0 every 10 check yes
+
+timestep        0.0005
+thermo          500
+thermo_style    custom step time temp etotal pe ke press vol density
+
+## replace your elements where you see C below
+## adjust 2Theta 1 120 to your relevant range. Lower bound can't be < 1
+compute         XRD all xrd 1.21553 C 2Theta 1 120 c 1 1 1 LP 0 echo
+fix             avgXRD all ave/histo/weight 1 1 1 1 120 1000 c_XRD[1] c_XRD[2] mode vector file _PH_-_P_GPa-_T_K.xrd
+run 0
