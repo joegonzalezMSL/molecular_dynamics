@@ -1,0 +1,100 @@
+dimension        3
+units            metal
+atom_style       atomic
+boundary         p p p
+
+read_data		_SAMPLE_
+
+replicate		10 10 30
+
+variable		phase string _PH_
+variable 		cz equal $(zlo+0.66*lz)
+variable 		press equal _P_*10000     #GPa pressure in bar
+variable 		tStart equal _T_          #initial temperaure to eq whole sample, something well below melt line
+variable 		tStart2 equal 2*_T_       #2x the initial eq temperature
+variable 		liqTemp equal 3*_T_       #temp used to create the liquid
+variable 		meltTemp equal _MTEMP_    #temperature you think is the melt temperature
+variable		actTemp equal _MTEMP_+500 #pick something 10% above the melt line
+variable		runRamp equal 10000
+variable		runNPT equal 20000
+variable		runLiq equal 20000
+variable		runNPH equal 200000
+variable		tstep equal 0.0003
+variable		therm equal 1000
+variable		dumpFreq equal 5000
+
+
+pair_style      pace product
+pair_coeff      * * sic-oct2024.yace Si C
+
+neighbor        2.0 bin
+neigh_modify    delay 0 every 10 check yes
+
+compute     	atom_energy all pe/atom
+compute      	Msd all  msd
+
+# Define regions for solid and liquid
+region          rsolid block EDGE EDGE  EDGE EDGE  EDGE ${cz} units box
+region          rliq block EDGE EDGE  EDGE EDGE  ${cz} EDGE   units box
+
+group           solid region rsolid
+group           liq region rliq
+
+
+
+timestep        ${tstep}
+thermo          ${therm}
+thermo_style    custom step time temp etotal pe ke press pxx pyy pzz vol density c_Msd[4]
+thermo_modify   norm yes
+
+velocity        all create ${tStart2} 9999
+# ------ thermalize sample well below suspected melt line, ideally middle of the P,T space --------------
+fix             temp0 all langevin ${tStart} ${tStart} $(300.0*dt) 12899
+fix             press all nph iso ${press} ${press} $(500.0*dt)
+
+run             ${runRamp}
+unfix			temp0
+
+# ------ bring to temperature close to suspected melt temperature --------------
+fix             tempR all langevin ${tStart} ${meltTemp} $(300.0*dt) 12899
+run				${runRamp}
+unfix 			tempR
+
+# ------ equilibrate at suspected melt temperature --------------
+fix             tempH all langevin ${meltTemp} ${meltTemp} $(300.0*dt) 12899
+run             ${runNPT}
+unfix           tempH
+unfix			press
+
+# ------ melt top portion to create liquid, keep bottom portion fixed NVT  ------------
+#velocity 		solid zero linear
+fix 			zeroforce solid setforce 0.0 0.0 0.0
+velocity 		liq create ${liqTemp} 12899
+
+
+fix 			tLiq liq langevin ${liqTemp} ${liqTemp} $(300.0*dt) 12899
+fix     		NVE liq nve
+run     		${runLiq}
+
+unfix			tLiq
+
+write_data      ${phase}-2phase.structure
+
+dump            DUMPSERIES all custom ${dumpFreq} dumps/sic-${phase}-${press}-${actTemp}-*.xyz id type element x y z c_atom_energy
+dump_modify     DUMPSERIES element Si C
+
+# ---- equilibrate liquid at actTemp
+fix         	tLiq2 liq langevin ${actTemp} ${actTemp}  $(300.0*dt) 12899
+run         	${runLiq}
+
+unfix			NVE
+unfix       	tLiq2
+unfix			zeroforce
+
+write_data		${phase}-2phase.structure
+
+variable		phot equal press
+
+fix         	NPHmelt all nph iso ${phot} ${phot} $(500.0*dt)
+run				${runNPH}
+
