@@ -1,7 +1,7 @@
 # molecular_dynamics
-Codes and scripts for processing molecular dynamics simulations
+Codes and scripts for running and processing molecular dynamics simulations
 
-All of the input scripts contain the following user defined variables. Use `sed` or something similar to edit them to suit your run.
+All of the input scripts contain at least the following user defined variables. Use `sed` or something similar to edit them to suit your run.
 ```
 _SAMPLE_ = structure file in the format of a normal LAMMPS data file
 _PH_     = tag to give a name to your simulation. Should be the crystal structure or phase your are simulating.
