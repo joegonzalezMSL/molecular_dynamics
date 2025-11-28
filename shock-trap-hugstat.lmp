@@ -1,0 +1,140 @@
+dimension       3
+units			metal
+atom_style		atomic
+boundary		p p p
+
+read_restart	_SAMPLE_
+
+## these are the naught values, taken from uncompressed or elastic zone
+## values need to be in per atom basis and GPa
+## itemp is the average temperature, taken from the profile, for the cut region
+## zlo and zhi are the position along the shock you want to cut
+variable		sE0 equal _E_
+variable		sP0 equal _P_
+variable		sV0 equal _V_
+variable		itemp equal _sTEMP_
+variable		zbottom equal _ZLO_
+variable		ztop equal _ZHI_
+
+variable		pzp equal _PZ_
+variable		pzzinput equal ${pzp}*10000
+
+variable		runHugStat equal 3500000
+
+
+## potential definition
+pair_style		pace product
+pair_coeff		* * sic-oct2024.yace Si C
+
+neighbor		2.0 bin
+neigh_modify	every 1 delay 0 check yes
+
+compute			PE_ALL all pe/atom
+compute			KE_ALL all ke/atom
+compute			Msd all msd com yes
+
+timestep		0.0003
+thermo			100
+thermo_style	custom step time temp etotal pe ke press pxx pyy pzz vol density c_Msd[4] lx ly lz
+thermo_modify	norm yes
+
+dump			RDUMP all custom 1000 dumps/trap-*.xyz id type x y z vx vy vz c_PE_ALL c_KE_ALL
+
+## cut sample and wrap box to fit new coordinates
+region			middle block EDGE EDGE EDGE EDGE ${zbottom} ${ztop} units box
+group			middleAtoms region middle
+group			otherAtoms subtract all middleAtoms
+delete_atoms	group otherAtoms
+change_box		middleAtoms boundary p p s
+
+
+## define new edges for relax/NVT process
+variable		zled equal "zlo+6.0"
+variable		zhed equal "zhi-6.0"
+region			rzledge block EDGE EDGE EDGE EDGE EDGE ${zled} units box
+region			rzhedge block EDGE EDGE EDGE EDGE ${zhed} EDGE units box
+group			gzl region rzledge
+group			gzh region rzhedge
+group			edges union gzl gzh
+group			mobileAtoms subtract all gzl gzh
+
+## subtract net flow by getting center of mass velocity
+compute			zChunks middleAtoms chunk/atom bin/1d z lower 10
+compute			vcmChunks middleAtoms vcm/chunk zChunks
+fix				MOM middleAtoms momentum/chunk 1 zChunks linear 0 0 1
+run				1
+unfix			MOM
+
+
+## define how the profiling is computed
+variable		BinSize     equal "0.1"
+variable		bin1DFreq   equal "1000"
+compute			ALL_PE all pe
+compute			SE_ALL all stress/atom NULL virial
+compute			coords all property/atom x y z
+variable		vx2 atom vx*vx
+variable		vy2 atom vy*vy
+variable		vz2 atom vz*vz
+compute			Chunk2 all chunk/atom bin/1d z 0.0 ${BinSize} units box
+fix				prop2 all ave/chunk ${bin1DFreq} 1 ${bin1DFreq} Chunk2 c_KE_ALL c_PE_ALL c_SE_ALL[1] c_SE_ALL[2] c_SE_ALL[3] vx vy vz v_vx2 v_vy2 v_vz2 file profiles.dat
+
+# ------------------------ NVT for edges -----------------------------
+
+## run NVT on the edges only, fix the central atoms, then relax edge atoms, then heat
+change_box		all boundary p p p
+write_data		cut_com_pbc.structure
+fix				freeze  mobileAtoms setforce 0.0 0.0 0.0
+restart			50000 trap-restart-*
+min_style		cg
+minimize		1.0e-12 1.0e-12 20000 2000000
+fix				NVEM edges nve
+fix				lang edges langevin ${itemp} ${itemp} $(300.0*dt) 32295
+run				10000
+unfix			freeze
+unfix			NVEM
+unfix			lang
+
+
+
+## run hugoniotstat
+variable		V    equal vol/atoms
+variable		E    equal etotal/atoms
+variable		Z    equal lz
+variable		T    equal temp
+variable		time equal dt*step
+
+variable		pxxG equal pxx/10000
+variable		pyyG equal pyy/10000
+variable		pzzG equal pzz/10000
+variable		tau  equal 0.5*(v_pzzG-0.5*(v_pxxG+v_pyyG))
+
+fix				OUT1  all print 1000 "${time} ${Z} ${V} ${E} ${pzzG} ${T}" screen no append start-config.dat title '#time Z V E pzz T'
+
+## reinitialize temperature for entire sample
+velocity		all create ${itemp} 4928459 mom yes rot no dist gaussian
+
+fix				myhug all nphug temp 300.0 300.0 $(300.0*dt) z ${pzzinput} ${pzzinput} $(1000.0*dt) drag 10.0 tchain 10 pchain 0
+
+variable		e0pa equal ${sE0}
+variable		v0pa equal ${sV0}
+variable		p0gpa equal ${sP0}
+
+variable		N    equal count(all)
+variable		E0   equal v_e0pa*v_N
+variable		V0   equal v_v0pa*v_N
+variable		P0   equal v_p0gpa*10000
+
+fix_modify		myhug e0 ${E0} v0 ${V0} p0 ${P0}
+
+variable		dele equal f_myhug[1]		 # E   (temperature part)
+variable		us   equal f_myhug[2]/10		      # shock velocity
+variable		up   equal f_myhug[3]/10		      # particle velocity
+
+fix				fig1   all print 1000 "${time} ${pzzG} ${tau}" screen no append stress-v-time-damped.dat title '#time Pzz tau'
+fix				stress all print 1000 "${time} ${Z} ${V} ${E} ${pzzG} ${tau} ${up} ${us} ${dele} ${T}" screen no append output.dat title '#time lz v e pzz tau up us dH T'
+
+thermo_style	custom step time temp etotal pe ke press pxx pyy pzz vol density c_Msd[4] lx ly lz v_tau v_us v_up
+thermo_modify	norm yes
+
+run				${runHugStat}
+
