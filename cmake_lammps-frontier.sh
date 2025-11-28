@@ -137,6 +137,8 @@ cmake ../cmake \
   -D PKG_SHOCK=ON \
   -D PKG_EXTRA-PAIR=ON \
   -D PKG_EXTRA-FIX=ON \
+  -D DOWNLOAD_PLUMED=yes \
+  -D PLUMED_MODE=static \
   -D PKG_PLUMED=ON \
   -D PKG_PTM=ON \
   -C ../cmake/presets/kokkos-hip.cmake
