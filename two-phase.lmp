@@ -51,7 +51,7 @@ thermo_modify   norm yes
 min_style       cg
 #fix            relax all box/relax iso ${pbar} couple xyz
 minimize        1.0e-8 1.0e-8 20000 100000
-
+#unfix        relax
 
 velocity        all create ${tStart2} 9999
 # ------ thermalize sample well below suspected melt line, ideally middle of the P,T space --------------
