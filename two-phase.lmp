@@ -9,7 +9,8 @@ replicate		10 10 30
 
 variable		phase string _PH_
 variable 		cz equal $(zlo+0.66*lz)
-variable 		press equal _P_*10000     #GPa pressure in bar
+variable 		pbar equal _P_*10000     #GPa pressure in bar
+variable    pgpa equal _P_
 variable 		tStart equal _T_          #initial temperaure to eq whole sample, something well below melt line
 variable 		tStart2 equal 2*_T_       #2x the initial eq temperature
 variable 		liqTemp equal 3*_T_       #temp used to create the liquid
@@ -47,10 +48,15 @@ thermo          ${therm}
 thermo_style    custom step time temp etotal pe ke press pxx pyy pzz vol density c_Msd[4]
 thermo_modify   norm yes
 
+min_style       cg
+#fix            relax all box/relax iso ${pbar} couple xyz
+minimize        1.0e-8 1.0e-8 20000 100000
+
+
 velocity        all create ${tStart2} 9999
 # ------ thermalize sample well below suspected melt line, ideally middle of the P,T space --------------
 fix             temp0 all langevin ${tStart} ${tStart} $(300.0*dt) 12899
-fix             press all nph iso ${press} ${press} $(500.0*dt)
+fix             press all nph iso ${pbar} ${pbar} $(500.0*dt)
 
 run             ${runRamp}
 unfix			temp0
@@ -80,7 +86,7 @@ unfix			tLiq
 
 write_data      ${phase}-2phase.structure
 
-dump            DUMPSERIES all custom ${dumpFreq} dumps/sic-${phase}-${press}-${actTemp}-*.xyz id type element x y z c_atom_energy
+dump            DUMPSERIES all custom ${dumpFreq} dumps/sic-${phase}-${pgpa}-${actTemp}-*.xyz id type element x y z c_atom_energy
 dump_modify     DUMPSERIES element Si C
 
 # ---- equilibrate liquid at actTemp
