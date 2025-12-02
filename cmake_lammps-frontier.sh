@@ -124,24 +124,36 @@ case "$answer" in
 esac
 
 cmake ../cmake \
-  -D LAMMPS_BIGBIG:BOOL=ON \
-  -D LAMMPS_SMALLBIG:BOOL=OFF \
-  -D LAMMPS_SMALLSMALL:BOOL=OFF \
-  -D CMAKE_C_COMPILER=cc \
-  -D CMAKE_CXX_COMPILER=CC \
-  -D CMAKE_Fortran_COMPILER=ftn \
+  -D CMAKE_C_COMPILER=hipcc \
+  -D CMAKE_CXX_COMPILER=hipcc \
+  -D CMAKE_AR=$(hipcc --print-prog-name=llvm-ar) \
+  -D CMAKE_RANLIB=$(hipcc --print-prog-name=llvm-ranlib) \
+  -D CMAKE_BUILD_TYPE=Release \
+  -D CMAKE_CXX_FLAGS="-O3 -g -munsafe-fp-atomics -DNDEBUG -I${MPICH_DIR}/include" \
+  -D CMAKE_C_FLAGS="-O3 -g -munsafe-fp-atomics -DNDEBUG -I${MPICH_DIR}/include" \
+  -D CMAKE_EXE_LINKER_FLAGS="-O3 -g" \
+  -D PKG_KOKKOS=ON \
+  -D Kokkos_ENABLE_HIP=ON \
+  -D Kokkos_ENABLE_SERIAL=ON \
+  -D Kokkos_ENABLE_OPENMP=OFF \
+  -D Kokkos_ENABLE_CUDA=OFF \
+  -D Kokkos_ENABLE_HIP_MULTIPLE_KERNEL_INSTANTIATIONS=ON \
+  -D Kokkos_ENABLE_ROCTHRUST=ON \
+  -D Kokkos_ARCH_AMD_GFX90A=ON \
+  -D Kokkos_ARCH_ZEN3=ON \
+  -D FFT_KOKKOS=HIPFFT \
+  -D MPI_CXX_SKIP_MPICXX=ON \
+  -D MPI_CXX_LIBRARIES="-L${MPICH_DIR}/lib -lmpi -L${CRAY_MPICH_ROOTDIR}/gtl/lib -lmpi_gtl_hsa" \
+  -D LAMMPS_BIGBIG=ON \
+  -D LAMMPS_GZIP=ON \
   -D PKG_MANYBODY=ON \
   -D PKG_ML-PACE=ON \
   -D PKG_ML-SNAP=ON \
-  -D PKG_DIFFRACTION=ON \
-  -D PKG_SHOCK=ON \
   -D PKG_EXTRA-PAIR=ON \
   -D PKG_EXTRA-FIX=ON \
-  -D DOWNLOAD_PLUMED=yes \
-  -D PLUMED_MODE=static \
-  -D PKG_PLUMED=ON \
-  -D PKG_PTM=ON \
-  -C ../cmake/presets/kokkos-hip.cmake
+  -D PKG_DIFFRACTION=ON \
+  -D PKG_SHOCK=ON \
+  -D PKG_PTM=ON
 
 echo ">>> Building LAMMPS..."
 make -j16
